@@ -1,0 +1,23 @@
+DistRes shared ProductSpecification.txt
+Server-hosted resource for distributed read/write access.
+
+[09:51:14] alice: distributed-update-from-alice
+[09:51:14] ben: distributed-update-from-ben
+[09:51:14] chen: distributed-update-from-chen
+[09:51:14] dina: distributed-update-from-dina
+[09:52:43] alice: distributed-update-from-alice
+[09:52:43] ben: distributed-update-from-ben
+[09:52:43] dina: distributed-update-from-dina
+[09:52:48] chen: distributed-update-from-chen
+[10:17:21] ben: distributed-update-from-ben
+[10:17:21] alice: distributed-update-from-alice
+[10:17:21] chen: distributed-update-from-chen
+[10:17:21] dina: distributed-update-from-dina
+[10:56:15] ben: distributed-update-from-ben
+[10:56:15] alice: distributed-update-from-alice
+[10:56:15] chen: distributed-update-from-chen
+[10:56:15] dina: distributed-update-from-dina
+[09:57:01] ben: distributed-update-from-ben
+[09:57:01] alice: distributed-update-from-alice
+[09:57:01] chen: distributed-update-from-chen
+[09:57:06] dina: distributed-update-from-dina
