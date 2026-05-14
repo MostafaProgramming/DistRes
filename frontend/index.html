@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DistRes Visualiser</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Distributed Resource Access and Synchronisation Engine</p>
+        <h1>DistRes Visualiser</h1>
+        <p class="lede">Replay client-server coordination, publish-subscribe notifications, retry-aware clients, and server-side shared-resource access from one evidence dashboard.</p>
+      </div>
+      <div class="hero-metrics">
+        <article><span>Server</span><strong id="server-label">127.0.0.1:54000</strong></article>
+        <article><span>Events</span><strong id="event-total">0</strong></article>
+        <article><span>Current Phase</span><strong id="phase-label">Loading</strong></article>
+      </div>
+    </header>
+
+    <section class="panel controls">
+      <div>
+        <p class="eyebrow">Playback</p>
+        <h2>Distributed event replay</h2>
+      </div>
+      <div class="control-row">
+        <button id="play" type="button">Play</button>
+        <button id="prev" type="button">Previous</button>
+        <button id="next" type="button">Next</button>
+        <button id="reset" type="button">Reset</button>
+      </div>
+      <div class="scrub">
+        <input id="scrubber" type="range" min="0" max="0" value="0">
+        <div><span id="counter">Event 0 / 0</span><span id="clock">t = 0.00s</span></div>
+      </div>
+    </section>
+
+    <main class="grid">
+      <section class="panel architecture">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Architecture</p>
+            <h2>Client-server structure</h2>
+          </div>
+          <span id="active-client" class="badge">No active event</span>
+        </div>
+
+        <div class="nodes">
+          <article class="node client-node">
+            <span>Client Nodes</span>
+            <strong>alice, ben, chen, dina</strong>
+            <p>Independent processes using TCP sockets, authentication, retries, and subscription connections.</p>
+          </article>
+          <article class="node server-node">
+            <span>Server Node</span>
+            <strong>DistResServer.exe</strong>
+            <p>Owns credentials, request coordination, readers-writer lock, pub-sub broker, and the shared file.</p>
+          </article>
+          <article class="node resource-node">
+            <span>Distributed Resource</span>
+            <strong>ProductSpecification.txt</strong>
+            <p>Server-hosted file. Multiple reads are allowed; writes are exclusive and publish update events.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel spotlight">
+        <p class="eyebrow">Event Spotlight</p>
+        <h2 id="spotlight-title">Waiting for data</h2>
+        <p id="spotlight-body">Run the DistRes demo to generate replay evidence.</p>
+        <div class="protocol">
+          <span>AUTH</span>
+          <span>READ</span>
+          <span>WRITE</span>
+          <span>SUBSCRIBE</span>
+          <span>EVENT UPDATE</span>
+        </div>
+      </section>
+
+      <section class="panel stats">
+        <p class="eyebrow">Run Summary</p>
+        <h2>What the demo proves</h2>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <section class="panel stream">
+        <p class="eyebrow">Publish-Subscribe</p>
+        <h2>Notification stream</h2>
+        <div id="notifications" class="feed"></div>
+      </section>
+
+      <section class="panel clients">
+        <p class="eyebrow">Client Nodes</p>
+        <h2>Distributed clients</h2>
+        <div id="client-grid" class="client-grid"></div>
+      </section>
+
+      <section class="panel timeline">
+        <p class="eyebrow">Timeline</p>
+        <h2>Coordination evidence</h2>
+        <div id="timeline-list" class="timeline-list"></div>
+      </section>
+
+      <section class="panel resource">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Server Hosted File</p>
+            <h2>ProductSpecification.txt</h2>
+          </div>
+          <button id="refresh-file" type="button">Refresh</button>
+        </div>
+        <pre id="file-content">Loading shared resource...</pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
