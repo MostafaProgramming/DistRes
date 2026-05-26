@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DistRes Live Client</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">DistRes Live Client</p>
+        <h1>Use the Distributed Resource</h1>
+        <p>Log in as a client node, read or write the server-hosted file, and watch live publish-subscribe notifications from other users.</p>
+      </div>
+      <div class="status" id="connection-status">Not connected</div>
+    </header>
+
+    <section class="panel login-panel">
+      <h2>Client Login</h2>
+      <div class="form-row">
+        <label>Username <input id="username" value="alice"></label>
+        <label>Password <input id="password" value="pass1" type="password"></label>
+        <button id="login" type="button">Connect</button>
+        <button id="logout" type="button" disabled>Disconnect</button>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Shared Resource</h2>
+        <div class="actions">
+          <button id="begin-read" type="button" disabled>Start Reading</button>
+          <button id="end-read" class="secondary" type="button" disabled>Stop Reading</button>
+          <button id="begin-write" type="button" disabled>Write Lock</button>
+          <button id="save-write" type="button" disabled>Save File</button>
+          <button id="cancel-write" class="secondary" type="button" disabled>Cancel</button>
+        </div>
+        <textarea id="file-editor" class="resource-editor" spellcheck="false" disabled>Connect, then read ProductSpecification.txt.</textarea>
+      </article>
+
+      <article class="panel">
+        <h2>Access Lock Status</h2>
+        <div id="lock-status" class="lock-status">No write lock held.</div>
+        <p class="muted">
+          Start Reading holds a shared read lock until you stop. Write Lock
+          waits for all readers to stop, then gives this client exclusive edit access.
+        </p>
+      </article>
+
+      <article class="panel notifications">
+        <h2>Subscriber Notifications</h2>
+        <div class="actions">
+          <button id="subscribe" type="button" disabled>Subscribe</button>
+        </div>
+        <div id="events" class="events">Connect, then subscribe to receive committed write events.</div>
+      </article>
+
+      <article class="panel">
+        <h2>How To Demonstrate</h2>
+        <ol>
+          <li>Open this page in two browser windows.</li>
+          <li>Log in as different users, for example alice and ben.</li>
+          <li>Click Subscribe in each window that should receive events.</li>
+          <li>Start reading in one window, then request Write Lock in the other.</li>
+          <li>Stop reading and watch the queued writer receive exclusive access.</li>
+          <li>Save the file and show the EVENT UPDATE notification in the other window.</li>
+        </ol>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

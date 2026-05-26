@@ -55,6 +55,40 @@ public:
         return sanitiseSingleLine(buffer.str());
     }
 
+    std::string readFull(const std::string& username)
+    {
+        // Full reads preserve line breaks for the live browser editor.
+        ReadGuard guard(lock_);
+        std::ifstream input(path_);
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] FULL READ granted to " << username << "\n";
+        return buffer.str();
+    }
+
+    std::string beginReadView(const std::string& username)
+    {
+        // This read lock stays active until END_READ. Multiple readers can
+        // hold it together, but a writer must wait until all readers stop.
+        lock_.acquireRead();
+        std::ifstream input(path_);
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] READ LOCK granted to " << username << "\n";
+        return buffer.str();
+    }
+
+    void endReadView(const std::string& username)
+    {
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] READ LOCK released by " << username << "\n";
+        lock_.releaseRead();
+    }
+
     int appendUpdate(const std::string& username, const std::string& text)
     {
         // WriteGuard gives this client exclusive access to the shared file.
@@ -69,6 +103,44 @@ public:
         std::cout << "[" << nowTime() << "] WRITE v" << version
                   << " committed by " << username << "\n";
         return version;
+    }
+
+    std::string beginWriteEdit(const std::string& username)
+    {
+        // This is a long-lived writer lock for the live UI edit session.
+        // While held, other readers and writers wait at WriterFairRWLock.
+        lock_.acquireWrite();
+        std::ifstream input(path_);
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] WRITE LOCK granted to " << username << "\n";
+        return buffer.str();
+    }
+
+    int commitWriteEdit(const std::string& username, const std::string& content)
+    {
+        // The lock is already held by beginWriteEdit(), so this replacement is exclusive.
+        int version = ++version_;
+        std::ofstream output(path_, std::ios::trunc);
+        output << content;
+        if (!content.empty() && content.back() != '\n')
+            output << "\n";
+
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] FULL WRITE v" << version
+                  << " committed by " << username << "\n";
+        lock_.releaseWrite();
+        return version;
+    }
+
+    void cancelWriteEdit(const std::string& username)
+    {
+        std::lock_guard<std::mutex> out(outputMutex_);
+        std::cout << "[" << nowTime() << "] WRITE LOCK released by "
+                  << username << " without saving\n";
+        lock_.releaseWrite();
     }
 
 private:
@@ -112,9 +184,15 @@ public:
     void publish(int version, const std::string& username, const std::string& text)
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        std::string detail = sanitiseSingleLine(text);
+        std::replace(detail.begin(), detail.end(), ' ', '-');
         // Subscribers only receive events after the write has been committed.
-        std::string event = "EVENT UPDATE v" + std::to_string(version)
-            + " writer=" + username + " text=" + sanitiseSingleLine(text);
+        std::string event = "EVENT UPDATE version=v" + std::to_string(version)
+            + " writer=" + username
+            + " resource=ProductSpecification.txt"
+            + " operation=write"
+            + " time=" + nowTime()
+            + " detail=" + detail;
 
         for (auto it = subscribers_.begin(); it != subscribers_.end();) {
             if (sendLine(*it, event)) {
@@ -189,12 +267,59 @@ private:
             return;
         }
 
+        bool writeEditActive = false;
+        bool readViewActive = false;
         std::string line;
         while (recvLine(client, line)) {
             if (line == "READ") {
                 // The server performs the read through ResourceRepository so
                 // clients never touch ProductSpecification.txt directly.
                 sendLine(client, "DATA " + resource_.readAll(username));
+            } else if (line == "READ_FULL") {
+                std::string content = resource_.readFull(username);
+                sendLine(client, "DATA_FULL " + escapeProtocolText(content));
+            } else if (line == "BEGIN_READ") {
+                if (writeEditActive) {
+                    sendLine(client, "ERR Finish or cancel write lock before reading");
+                    continue;
+                }
+                if (readViewActive) {
+                    sendLine(client, "ERR Read lock already active");
+                    continue;
+                }
+                std::string content = resource_.beginReadView(username);
+                readViewActive = true;
+                sendLine(client, "READ_DATA " + escapeProtocolText(content));
+            } else if (line == "END_READ") {
+                if (readViewActive) {
+                    resource_.endReadView(username);
+                    readViewActive = false;
+                }
+                sendLine(client, "OK READ_RELEASED");
+            } else if (line == "BEGIN_WRITE") {
+                if (readViewActive) {
+                    sendLine(client, "ERR Stop reading before requesting write lock");
+                    continue;
+                }
+                std::string content = resource_.beginWriteEdit(username);
+                writeEditActive = true;
+                sendLine(client, "EDIT_DATA " + escapeProtocolText(content));
+            } else if (line.rfind("COMMIT_WRITE ", 0) == 0) {
+                if (!writeEditActive) {
+                    sendLine(client, "ERR No active write lock");
+                    continue;
+                }
+                std::string content = unescapeProtocolText(line.substr(13));
+                int version = resource_.commitWriteEdit(username, content);
+                writeEditActive = false;
+                sendLine(client, "OK WRITE v" + std::to_string(version));
+                broker_.publish(version, username, "full-file-edit-committed");
+            } else if (line == "CANCEL_WRITE") {
+                if (writeEditActive) {
+                    resource_.cancelWriteEdit(username);
+                    writeEditActive = false;
+                }
+                sendLine(client, "OK CANCELLED");
             } else if (line.rfind("WRITE ", 0) == 0) {
                 std::string text = line.substr(6);
 
@@ -218,6 +343,10 @@ private:
             }
         }
 
+        if (writeEditActive)
+            resource_.cancelWriteEdit(username);
+        if (readViewActive)
+            resource_.endReadView(username);
         closesocket(client);
     }
 

@@ -97,6 +97,43 @@ inline std::string sanitiseSingleLine(std::string text)
     return text;
 }
 
+inline std::string escapeProtocolText(const std::string& text)
+{
+    std::string escaped;
+    for (char ch : text) {
+        if (ch == '\\') {
+            escaped += "\\\\";
+        } else if (ch == '\n') {
+            escaped += "\\n";
+        } else if (ch == '\r') {
+            escaped += "\\r";
+        } else {
+            escaped.push_back(ch);
+        }
+    }
+    return escaped;
+}
+
+inline std::string unescapeProtocolText(const std::string& text)
+{
+    std::string unescaped;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\\' && i + 1 < text.size()) {
+            char next = text[++i];
+            if (next == 'n') {
+                unescaped.push_back('\n');
+            } else if (next == 'r') {
+                unescaped.push_back('\r');
+            } else {
+                unescaped.push_back(next);
+            }
+        } else {
+            unescaped.push_back(text[i]);
+        }
+    }
+    return unescaped;
+}
+
 class WinsockSession {
 public:
     WinsockSession()

@@ -15,6 +15,7 @@ Multiple client nodes connect to one server node over TCP sockets. The server ow
 - publish-subscribe update notifications after committed writes
 - retry logic when the server is temporarily unavailable
 - replayable frontend visualiser for demonstration evidence
+- live browser client for real read/write use and notifications
 
 ## Coursework Requirement Mapping
 
@@ -88,6 +89,29 @@ The visualiser shows:
 - publish-subscribe notifications
 - current `ProductSpecification.txt` contents
 
+## Run Live Browser Client
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\launch_live_ui.ps1
+```
+
+Then open:
+
+```text
+http://localhost:8200
+```
+
+This UI lets browser users actually use DistRes:
+
+- log in as a client node
+- explicitly subscribe to server-published update events
+- start and stop a held read session for `ProductSpecification.txt`
+- request the exclusive writer lock
+- edit and save the shared file through the server
+- receive live `EVENT UPDATE` subscriber notifications
+
+For a strong demonstration, open two browser windows and log in as different users. Click Subscribe in the window that should observe updates, start reading in one window, request the write lock in the other, then stop reading to show the queued writer receiving exclusive access and publishing an update event.
+
 ## Manual Client Demo
 
 Open one terminal for the server:
@@ -127,6 +151,12 @@ DistRes uses a simple line-based TCP protocol:
 | `AUTH username password` | Authenticate the client with the server. |
 | `READ` | Request the current shared file contents. |
 | `WRITE text` | Ask the server to append an update to the shared file. |
+| `READ_FULL` | Request full file contents for the live browser editor. |
+| `BEGIN_READ` | Acquire a shared read lock and return file contents. |
+| `END_READ` | Release this client's shared read lock. |
+| `BEGIN_WRITE` | Acquire the writer lock and return editable file contents. |
+| `COMMIT_WRITE text` | Replace the shared file and release the writer lock. |
+| `CANCEL_WRITE` | Release the writer lock without saving. |
 | `SUBSCRIBE` | Register for update notifications. |
 | `QUIT` | Close the client session. |
 | `EVENT UPDATE vN ...` | Server notification after a committed write. |
