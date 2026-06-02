@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DistRes Server Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell dashboard-shell">
+    <header>
+      <div>
+        <p class="eyebrow">DistRes Server Node</p>
+        <h1>Server Dashboard</h1>
+        <p>Read-only monitor for live client sessions, server-side locking, subscriber state, and update events.</p>
+        <a class="header-link" href="index.html" target="_blank" rel="noreferrer">Open Client UI</a>
+      </div>
+      <div class="status" id="server-status">Connecting...</div>
+    </header>
+
+    <section class="metric-grid">
+      <article class="metric-card">
+        <span>Connected Clients</span>
+        <strong id="connected-clients">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Active Readers</span>
+        <strong id="active-readers-count">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Active Writer</span>
+        <strong id="active-writer">None</strong>
+      </article>
+      <article class="metric-card">
+        <span>Subscribers</span>
+        <strong id="subscriber-count">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Waiting Writes</span>
+        <strong id="waiting-writes-count">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Resource Version</span>
+        <strong id="resource-version">-</strong>
+      </article>
+    </section>
+
+    <section class="dashboard-grid">
+      <article class="panel">
+        <div class="section-heading">
+          <h2>Client Sessions</h2>
+          <span id="last-refresh">Last refresh: -</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Session</th>
+                <th>State</th>
+                <th>Subscribed</th>
+                <th>Last Action</th>
+              </tr>
+            </thead>
+            <tbody id="client-table">
+              <tr><td colspan="5">No connected clients.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Lock Queue</h2>
+        <div class="queue-stack">
+          <div class="queue-row">
+            <span>Readers holding lock</span>
+            <strong id="active-readers">None</strong>
+          </div>
+          <div class="queue-row">
+            <span>Writer holding lock</span>
+            <strong id="writer-detail">None</strong>
+          </div>
+          <div class="queue-row">
+            <span>Readers waiting</span>
+            <strong id="waiting-reads">None</strong>
+          </div>
+          <div class="queue-row">
+            <span>Writers waiting</span>
+            <strong id="waiting-writes">None</strong>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel event-panel">
+        <h2>Server Event Stream</h2>
+        <div id="server-events" class="server-events">Waiting for activity...</div>
+      </article>
+
+      <article class="panel">
+        <h2>Demo Talking Points</h2>
+        <ol>
+          <li>Every browser client maps to an authenticated socket session on the C++ server.</li>
+          <li>Read locks can be held by several clients at once.</li>
+          <li>The writer lock is exclusive and waits until active readers stop.</li>
+          <li>Committed writes publish update events to subscribed clients.</li>
+          <li>The dashboard is read-only, so it observes coordination without changing resource access.</li>
+        </ol>
+      </article>
+    </section>
+  </main>
+
+  <script src="server.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ Multiple client nodes connect to one server node over TCP sockets. The server ow
 
 - TCP client-server communication using Winsock
 - server-side authentication for distributed client nodes
+- server-hosted credential database in `CredentialsDatabase.txt`
 - server-hosted shared resource file
 - concurrent read access for multiple clients
 - exclusive write access for one client at a time
@@ -23,7 +24,7 @@ Multiple client nodes connect to one server node over TCP sockets. The server ow
 | --- | --- |
 | Distributed node communication | `DistResClient.exe` communicates with `DistResServer.exe` over TCP. |
 | Client-server coordination | `DistResServer` accepts sockets and creates a worker thread per client. |
-| Server-hosted credentials | `UserStore` validates usernames and passwords on the server. |
+| Server-hosted credentials | `UserStore` loads and validates `CredentialsDatabase.txt` on the server. |
 | Server-hosted shared file | `ResourceRepository` controls access to `ProductSpecification.txt`. |
 | Multiple concurrent readers | `ReadGuard` and `WriterFairRWLock::acquireRead()` allow shared read access. |
 | One writer at a time | `WriteGuard` and `WriterFairRWLock::acquireWrite()` enforce exclusive writes. |
@@ -98,7 +99,7 @@ powershell -ExecutionPolicy Bypass -File .\launch_live_ui.ps1
 Then open:
 
 ```text
-http://localhost:8200
+http://127.0.0.1:8200
 ```
 
 This UI lets browser users actually use DistRes:
@@ -109,6 +110,14 @@ This UI lets browser users actually use DistRes:
 - request the exclusive writer lock
 - edit and save the shared file through the server
 - receive live `EVENT UPDATE` subscriber notifications
+
+Open the server dashboard in another tab:
+
+```text
+http://127.0.0.1:8200/server.html
+```
+
+The dashboard is read-only and shows connected clients, active readers, the active writer, queued lock requests, subscriber count, latest resource version, and recent server events.
 
 For a strong demonstration, open two browser windows and log in as different users. Click Subscribe in the window that should observe updates, start reading in one window, request the write lock in the other, then stop reading to show the queued writer receiving exclusive access and publishing an update event.
 

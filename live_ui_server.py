@@ -4,6 +4,7 @@ import json
 import queue
 import socket
 import threading
+import time
 import uuid
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -71,6 +72,171 @@ def connect_and_authenticate(username: str, password: str) -> socket.socket:
     return sock
 
 
+def current_time() -> str:
+    """Human-readable time for the live server dashboard."""
+    return time.strftime("%H:%M:%S")
+
+
+def parse_write_version(response: str) -> str:
+    """Extract vN from responses such as OK WRITE v3."""
+    parts = response.split()
+    return parts[-1] if len(parts) >= 3 and parts[-1].startswith("v") else "-"
+
+
+class ServerMonitor:
+    """Read-only view of the DistRes server activity for the demo dashboard."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.clients: dict[str, dict] = {}
+        self.events: list[dict] = []
+        self.resource_version = "-"
+
+    def connect_client(self, session_id: str, username: str) -> None:
+        with self.lock:
+            self.clients[session_id] = {
+                "sessionId": session_id[:8],
+                "username": username,
+                "state": "connected",
+                "reading": False,
+                "writing": False,
+                "waiting": "",
+                "subscribed": False,
+                "connectedAt": current_time(),
+                "lastAction": "AUTH accepted",
+            }
+            self._record_locked("AUTH", f"{username} authenticated and connected", username)
+
+    def disconnect_client(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.pop(session_id, None)
+            if client:
+                self._record_locked("DISCONNECT", f"{client['username']} disconnected", client["username"])
+
+    def set_waiting(self, session_id: str, wait_type: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["state"] = f"waiting for {wait_type}"
+            client["waiting"] = wait_type
+            client["lastAction"] = f"requested {wait_type} lock"
+            self._record_locked("WAIT", f"{client['username']} is waiting for {wait_type} access", client["username"])
+
+    def set_reading(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["state"] = "reading"
+            client["reading"] = True
+            client["waiting"] = ""
+            client["lastAction"] = "READ lock granted"
+            self._record_locked("READ LOCK", f"{client['username']} received shared read access", client["username"])
+
+    def release_read(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["state"] = "connected"
+            client["reading"] = False
+            client["waiting"] = ""
+            client["lastAction"] = "READ lock released"
+            self._record_locked("READ RELEASE", f"{client['username']} released shared read access", client["username"])
+
+    def set_writing(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["state"] = "writing"
+            client["writing"] = True
+            client["waiting"] = ""
+            client["lastAction"] = "WRITE lock granted"
+            self._record_locked("WRITE LOCK", f"{client['username']} received exclusive write access", client["username"])
+
+    def release_write(self, session_id: str, action: str, version: str = "-") -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            if version != "-":
+                self.resource_version = version
+            client["state"] = "connected"
+            client["writing"] = False
+            client["waiting"] = ""
+            client["lastAction"] = action
+            self._record_locked("WRITE RELEASE", f"{client['username']} {action}", client["username"])
+
+    def set_subscribed(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["subscribed"] = True
+            client["lastAction"] = "SUBSCRIBE accepted"
+            self._record_locked("SUBSCRIBE", f"{client['username']} subscribed for update events", client["username"])
+
+    def record_read(self, session_id: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            if not client:
+                return
+            client["lastAction"] = "READ_FULL completed"
+            self._record_locked("READ", f"{client['username']} read the full resource", client["username"])
+
+    def record_event_delivery(self, session_id: str, event: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            username = client["username"] if client else "unknown"
+            self._record_locked("EVENT UPDATE", f"delivered to {username}: {event}", username)
+
+    def record_error(self, session_id: str, message: str) -> None:
+        with self.lock:
+            client = self.clients.get(session_id)
+            username = client["username"] if client else "unknown"
+            if client:
+                client["waiting"] = ""
+                client["lastAction"] = message
+            self._record_locked("ERROR", message, username)
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            clients = list(self.clients.values())
+            active_readers = [c["username"] for c in clients if c["reading"]]
+            active_writers = [c["username"] for c in clients if c["writing"]]
+            waiting_reads = [c["username"] for c in clients if c["waiting"] == "read"]
+            waiting_writes = [c["username"] for c in clients if c["waiting"] == "write"]
+            return {
+                "generatedAt": current_time(),
+                "distresHost": DISTRES_HOST,
+                "distresPort": DISTRES_PORT,
+                "resource": "ProductSpecification.txt",
+                "resourceVersion": self.resource_version,
+                "connectedClients": len(clients),
+                "activeReaders": active_readers,
+                "activeWriter": active_writers[0] if active_writers else "",
+                "waitingReads": waiting_reads,
+                "waitingWrites": waiting_writes,
+                "subscriberCount": sum(1 for c in clients if c["subscribed"]),
+                "clients": sorted(clients, key=lambda c: c["connectedAt"]),
+                "events": list(reversed(self.events[-40:])),
+            }
+
+    def _record_locked(self, event_type: str, message: str, username: str = "") -> None:
+        self.events.append({
+            "time": current_time(),
+            "type": event_type,
+            "username": username,
+            "message": message,
+        })
+        self.events = self.events[-80:]
+
+
+monitor = ServerMonitor()
+
+
 class LiveSession:
     """One browser user mapped to one command socket and one subscription socket."""
 
@@ -85,23 +251,35 @@ class LiveSession:
         self.reading = False
         self.editing = False
         self.subscribed = False
+        monitor.connect_client(self.id, username)
 
     def read(self) -> str:
         """Ask the C++ server to read ProductSpecification.txt."""
-        send_line(self.command_socket, "READ_FULL")
-        response = recv_line(self.command_socket)
-        if not response.startswith("DATA_FULL "):
-            raise RuntimeError(response)
-        return unescape_protocol_text(response[len("DATA_FULL "):])
+        try:
+            send_line(self.command_socket, "READ_FULL")
+            response = recv_line(self.command_socket)
+            if not response.startswith("DATA_FULL "):
+                raise RuntimeError(response)
+            monitor.record_read(self.id)
+            return unescape_protocol_text(response[len("DATA_FULL "):])
+        except Exception as exc:
+            monitor.record_error(self.id, f"READ failed: {exc}")
+            raise
 
     def begin_read(self) -> str:
         """Acquire a server-side read lock and return the shared file content."""
-        send_line(self.command_socket, "BEGIN_READ")
-        response = recv_line(self.command_socket)
-        if not response.startswith("READ_DATA "):
-            raise RuntimeError(response)
-        self.reading = True
-        return unescape_protocol_text(response[len("READ_DATA "):])
+        monitor.set_waiting(self.id, "read")
+        try:
+            send_line(self.command_socket, "BEGIN_READ")
+            response = recv_line(self.command_socket)
+            if not response.startswith("READ_DATA "):
+                raise RuntimeError(response)
+            self.reading = True
+            monitor.set_reading(self.id)
+            return unescape_protocol_text(response[len("READ_DATA "):])
+        except Exception as exc:
+            monitor.record_error(self.id, f"BEGIN_READ failed: {exc}")
+            raise
 
     def end_read(self) -> str:
         """Release this browser user's server-side read lock."""
@@ -109,16 +287,23 @@ class LiveSession:
         response = recv_line(self.command_socket)
         if response.startswith("OK READ_RELEASED"):
             self.reading = False
+            monitor.release_read(self.id)
         return response
 
     def begin_write(self) -> str:
         """Acquire the server-side writer lock and return editable file content."""
-        send_line(self.command_socket, "BEGIN_WRITE")
-        response = recv_line(self.command_socket)
-        if not response.startswith("EDIT_DATA "):
-            raise RuntimeError(response)
-        self.editing = True
-        return unescape_protocol_text(response[len("EDIT_DATA "):])
+        monitor.set_waiting(self.id, "write")
+        try:
+            send_line(self.command_socket, "BEGIN_WRITE")
+            response = recv_line(self.command_socket)
+            if not response.startswith("EDIT_DATA "):
+                raise RuntimeError(response)
+            self.editing = True
+            monitor.set_writing(self.id)
+            return unescape_protocol_text(response[len("EDIT_DATA "):])
+        except Exception as exc:
+            monitor.record_error(self.id, f"BEGIN_WRITE failed: {exc}")
+            raise
 
     def commit_write(self, text: str) -> str:
         """Replace the shared file while this session holds the writer lock."""
@@ -126,6 +311,7 @@ class LiveSession:
         response = recv_line(self.command_socket)
         if response.startswith("OK WRITE"):
             self.editing = False
+            monitor.release_write(self.id, f"committed {parse_write_version(response)}", parse_write_version(response))
         return response
 
     def cancel_write(self) -> str:
@@ -133,6 +319,7 @@ class LiveSession:
         send_line(self.command_socket, "CANCEL_WRITE")
         response = recv_line(self.command_socket)
         self.editing = False
+        monitor.release_write(self.id, "cancelled write lock")
         return response
 
     def subscribe(self) -> str:
@@ -149,6 +336,7 @@ class LiveSession:
 
         self.subscription_socket = sub
         self.subscribed = True
+        monitor.set_subscribed(self.id)
         threading.Thread(target=self._subscription_loop, args=(sub,), daemon=True).start()
         return response
 
@@ -170,6 +358,7 @@ class LiveSession:
                     pass
             send_line(self.command_socket, "QUIT")
             self.command_socket.close()
+            monitor.disconnect_client(self.id)
         except OSError:
             pass
 
@@ -177,10 +366,13 @@ class LiveSession:
         """Keep a subscriber socket open and forward events to the browser."""
         try:
             while not self.closed:
-                self.event_queue.put(recv_line(sub))
+                event = recv_line(sub)
+                self.event_queue.put(event)
+                monitor.record_event_delivery(self.id, event)
         except Exception as exc:
             if not self.closed:
                 self.event_queue.put(f"EVENT ERROR detail={exc}")
+                monitor.record_error(self.id, f"subscription failed: {exc}")
 
 
 sessions: dict[str, LiveSession] = {}
@@ -197,6 +389,9 @@ class LiveDistResHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
             self.send_json({"status": "live-ui-ready", "distresPort": DISTRES_PORT})
+            return
+        if parsed.path == "/api/server-state":
+            self.send_json(monitor.snapshot())
             return
         if parsed.path.startswith("/api/events/"):
             self.handle_events(parsed.path.rsplit("/", 1)[-1])
@@ -357,7 +552,7 @@ class LiveDistResHandler(SimpleHTTPRequestHandler):
 
 def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 8200), LiveDistResHandler)
-    print("Serving live DistRes UI at http://localhost:8200")
+    print("Serving live DistRes UI at http://127.0.0.1:8200")
     server.serve_forever()
 
 

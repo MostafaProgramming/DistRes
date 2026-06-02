@@ -22,7 +22,8 @@ $server = Start-DistResProcess ".\DistResServer.exe"
 Start-Sleep -Seconds 1
 
 try {
-    Write-Host "Opening live DistRes UI at http://localhost:8200"
+    Write-Host "Opening live DistRes client UI at http://127.0.0.1:8200"
+    Write-Host "Opening read-only server dashboard at http://127.0.0.1:8200/server.html"
     Write-Host "Press Ctrl+C to stop the live UI and server."
 
     # The Python bridge serves the browser UI and translates HTTP calls into
